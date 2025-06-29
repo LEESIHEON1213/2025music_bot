@@ -1,0 +1,147 @@
+#필수적인 설정
+#------------------------------------------------------------------------------------------------------------------------------------------------
+#멤버 목록에서 보이는 봇의 상태메세지 지정
+
+# 봇의 이름 지정
+bot_name=
+
+# 멤버 목록에서 보이는 봇의 상태메세지 지정
+status=
+
+# 봇 토큰 (봇 실행에 꼭 필요합니다.)
+BOT_TOKEN=
+ 
+# 유튜브 API 키 (봇 음악 기능 사용에 꼭 필요합니다.)
+api_key=
+
+#음악기능을 사용할 수 있는 전용 채널이름 지정.
+CHANNEL_NAME=🎶┃바냐
+
+#서버에 멤버가 들어왔을 때 환영인사 메시지를 자동으로 보낼 채널이름 지정.
+MAIN_CHANNEL=💬┃일반
+
+#이모지를 등록할 창고 채널 지정 (사용법: 해당 채널에 움짤이나 이미지를 올리고 서버 이모지에 등록됩니다. 그 후 그 이모지를 사용해보시면 압니다.)
+emoji_store_channel=💿┃이모지창고
+
+#들어가면 임시통화방을 만들어주는 통화방의 이름을 지정.
+TRIGGER_CHANNEL_NAME=🔻통화 시작
+
+#위에 임시 통화방을 만들 카테고리 이름 지정.
+TEMP_CATEGORY_NAME=통화방
+
+#임시 통화방이 만들어주는 채널의 이름을 지정.
+TEMP_CHANNEL_NAME=voice
+
+#음악 정보 패널의 이름을 바꿀 수 있음.
+control_panel_title=음악을 틀어보세요.
+
+#재생중에 패널에 나올 메시지를 지정.
+currently_playing_embed_title=듣는 중
+
+#봇의 모든 패널메시지의 색깔을 지정.
+embed_color=0xAFDDEC
+
+
+#!게임
+#히든 명령어
+make_role=📰게임리뷰, 🔫FPS, 🏹AOS, 🌍멀티게임, 🎹리듬게임, 🌀TCG, 👊격투게임, 🐉TRPG
+
+#이걸 채울시 위에 역할들을 부여하면서 동시에 같이 부여하고 싶은 역할을 같이 부여할 수 있습니다.
+#다만 이 역할은 회수가 안되기 때문에 딱히 서버 시민권을 부여하고 싶지 않다면 비워둬도 작동은 합니다.
+#쓰실거면 이 이름의 역할이 서버에 존재해야 합니다.
+civil_role=DGD멤버
+
+#역할 부여 패널메시지에 표시될 이미지를 지정합니다. 저는 그냥 간단한 설명을 넣었습니다.
+#비워둬도 작동에 문제는 없고 인터넷에 이미지 업로드해서 링크를 넣어도 되고 아무렇게나 쓰시면 됩니다.
+image_set=
+
+
+#봇의 참가를 허락할 서버를 지정합니다.
+#참가를 허락하고 싶은 서버의 목록을 적습니다.
+#!퇴장 명령어 사용시 등록되지 않은 서버에서 탈출합니다.
+allow_server=(서버이름1), (서버이름2)
+
+
+
+
+
+
+
+
+
+#필수적이지 않은 부분들
+#------------------------------------------------------------------------------------------------------------------------------------------------
+
+#봇을 킬 때 CMD에 나오는 메시지
+bot_welcome_message=''나비를 따라가고 있어요."
+
+# 반복 관련
+repeat_mode_title=반복 모드
+repeat_mode_message=반복 모드를 {state_text} 상태로 바꿨어요. {skip_text}
+repeat_mode_enabled_message=반복 모드가 활성화되었어요.
+repeat_mode_disabled_message=반복 모드가 비활성화되었어요.
+repeat_mode_change_message=반복 모드 변경 했어요.
+repeat_mode_skip_error=반복 모드에서는 곡을 스킵할 수 없어요.
+
+
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# 에러 관련
+error_title=오류에영
+error_message_searching_stop=지금은 할 수 없어요.
+error_message_queue_empty=대기열이 비어 있어요.
+error_message_no_playing=현재 재생 중인 곡이 없어요.
+pause_error=반복 모드일 때는 일시 정지를 할 수 없어요.
+shuffle_error=반복 모드일 때는 셔플을 할 수 없어요.
+skip_error=반복 모드일 때는 곡을 스킵할 수 없어요.
+currently_playing_embed_description=현재 재생 중인 곡이 없어요.
+invalid_reaction_message=이 반응은 지원되지 않아요.
+invalid_link_title=지원하지 않는 링크
+invalid_link_message=지원되지 않는 링크에요.
+playlist_not_found=플레이리스트를 찾을 수 없어요.
+unknown_playlist_name=알 수 없는 플레이리스트
+invalid_audio_format=업로드된 파일 형식은 잘 모르겠어요. (.mp3, .wav, .ogg, .flac, .m4a, .aac 파일만 가능합니다.)
+last_song_error=마지막 곡은 스킵할 수 없어요.
+skip_song_message=곡을 스킵했어요.
+no_entrance=통화방에 먼저 참가해주세요.
+not_voice=먼저 통화방에 참여해주세요.
+queue_list=곡이 더 없네요...
+
+#대기열 관련
+info_title=정보
+no_song_playing_error=재생 중인 곡이 없어요.
+queue_empty_message=대기열이 비어 있어요.
+queue_empty_title=대기열 없음
+queue_title=🎶 현재 대기열
+
+#오디오 파일 업로드
+#이스터에그
+thumbnail_url=https://i.postimg.cc/4dJ60D6M/yu-narukami-dancing.gif
+audio_analysis_error=오디오 파일 분석 실패
+
+
+#셔플 관련
+shuffle_fail_title=셔플 실패
+shuffle_fail_message=곡이 충분하지 않아요.
+shuffle_complete_title=셔플 완료에요
+shuffle_complete_message=대기열을 섞었어요.
+
+
+#일시정지 관련
+pause_title=음악 일시 정지
+pause_message=음악이 일시 정지되었어요.
+resume_title=음악 재개
+resume_message=음악을 다시 시작해요.
+
+# 검색 관련
+searching_message=검색 중...
+waiting_message=조금만 기다려주세요.
+search_failed_title=검색 실패
+search_failed_message=곡을 찾을 수 없어요.
+search_error_title=검색 오류
+search_error_message=검색 중 오류가 발생했어요.
+processing_audio=오디오 파일을 분석 중이에영. 잠시만 기다리세요.
+searching_title=곡을 검색 중이에요...
+searching_description=검색이 완료될 때까지 기다리세요.
+
+#기타
+connected_to_channel=봇이 채널에 연결되었습니다: {channel_name}
