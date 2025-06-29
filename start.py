@@ -32,15 +32,10 @@ from collections import deque
 from discord.ui import View, Button
 
 
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 history_file_path = "recent_tracks.json"
 recent_tracks = deque()
-
 
 # 시작 시 로드
 try:
@@ -73,6 +68,7 @@ def save_recent_track(entry):
 
 
 
+#MusicState 클래스
 class MusicState:
     def __init__(self):
         # 기본 상태 설정
@@ -221,6 +217,113 @@ class MusicState:
 
 
 
+
+
+
+# 진행 상태 저장
+user_sessions = {}
+questions = [
+    "게임 이름이 무엇인가요?",
+    "날짜와 시간은 어떻게 되나요?",
+    "장소는 어느 곳에서 진행되나요?",
+    "최대 참여 인수는 어떻게 되나요?",
+    "따로 전달하고 싶은 참고사항이나 기타사항들을 말해주세요.",
+    "임베드 이미지로 올리고 싶은 게임 일러스트 배너를 올려주세요."
+]
+
+
+def load_config(config_file="설정.txt"):
+    """설정 파일을 읽고 값을 반환하는 함수"""
+    config = {}
+    try:
+        with open(config_file, "r", encoding="utf-8") as file:
+            for line in file:
+                if "=" not in line or not line.strip():
+                    continue
+                key, value = line.strip().split("=", 1)
+                config[key] = value
+    except Exception as e:
+        print(f"[ERROR] 설정 파일을 읽는 중 오류 발생: {e}")
+    return config
+
+def get_channel_name():
+    try:
+        return CHANNEL_NAME
+    except Exception as e:
+        print(f"[ERROR] 채널명 불러오기 실패: {e}")
+        return None
+    
+
+#전역변수
+config = load_config()
+
+
+# 봇 토큰 읽기
+BOT_TOKEN = config.get("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("설정 파일에 봇 토큰이 없습니다.")
+
+# 유튜브 API 키 읽기
+api_key = config.get('api_key')
+if not api_key:
+    raise ValueError("설정 파일에 유튜브 API 키가 없습니다.")
+
+# 채널명 읽기
+CHANNEL_NAME = config.get("CHANNEL_NAME")
+if not CHANNEL_NAME:
+    raise ValueError("설정 파일에 채널명이 없습니다.")
+
+
+
+root_path = config.get("root", "").strip('"').strip("'")
+ffmpeg_path = os.path.abspath(os.path.join(root_path, "ffmpeg.exe"))
+MAX_EMOJIS = 50
+TEMP_CHANNELS = {}  # 생성된 채널 관리
+MAX_RETRIES = 3
+queue_lock = asyncio.Lock()
+last_played_embed = None
+MAX_SONGS = 50 #더 높게 설정해도 유튜브 API 정책으로 한번에 50곡이 한계임.
+channel_name = get_channel_name()
+config = load_config()  # 설정 파일을 불러옵니다.
+music_state = MusicState()
+EMOJI_JSON_PATH = "emoji.json"
+EMOJI_FOLDER = "emoji"
+TARGET_SIZE = (128, 128)
+intents = discord.Intents.default()
+intents.messages = True
+intents.guilds = True
+intents.message_content = True
+intents.reactions = True
+intents.members = True
+intents.voice_states = True
+emoji_map = set()
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+
+
+# FFmpeg 옵션
+ffmpeg_opts = {
+    'executable': ffmpeg_path,
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -loglevel panic',
+    'options': '-vn -af "volume=0.5"'
+}
+
+if not os.path.exists(EMOJI_FOLDER):
+    os.makedirs(EMOJI_FOLDER)
+
+
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+
+
+
+
 DATA_DIR = os.path.abspath("data")  # 절대경로로 설정
 # 봇 재시작 상태 플래그
 is_restart_in_progress = False
@@ -273,7 +376,7 @@ async def processing_embed(channel, title, description, color):
 
 ydl_opts = {
         'format': 'bestaudio/best',
-        'noplaylist': False,  # 기존엔 단일 영상만 처리했음
+        'noplaylist': False,
         'quiet': True,
         'no-warnings': True,
         'default-search': 'ytsearch',
@@ -293,27 +396,6 @@ ydl_opts = {
 }
 
 
-def load_config(config_file="설정.txt"):
-    """설정 파일을 읽고 값을 반환하는 함수"""
-    config = {}
-    try:
-        with open(config_file, "r", encoding="utf-8") as file:
-            for line in file:
-                if "=" not in line or not line.strip():
-                    continue
-                key, value = line.strip().split("=", 1)
-                config[key] = value
-    except Exception as e:
-        print(f"[ERROR] 설정 파일을 읽는 중 오류 발생: {e}")
-    return config
-
-
-# 설정값 불러오기
-config = load_config()
-root_path = config.get("root", "").strip('"').strip("'")
-ffmpeg_path = os.path.abspath(os.path.join(root_path, "ffmpeg.exe"))
-
-
 # FFmpeg 경로 설정 (현재 디렉토리의 'ffmpeg' 폴더 내부)
 ffmpeg_path = os.path.join(os.getcwd(), "ffmpeg", "ffmpeg.exe")
 
@@ -328,13 +410,6 @@ if os.path.isfile(opus_path):
     discord.opus.load_opus(opus_path)
 else:
     raise FileNotFoundError("[ERROR] 'libopus.dll' 파일이 현재 디렉토리에 존재하지 않습니다.")
-
-# FFmpeg 옵션
-ffmpeg_opts = {
-    'executable': ffmpeg_path,
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -loglevel panic',
-    'options': '-vn'
-}
 
 
 
@@ -470,45 +545,11 @@ async def handle_recent_tracks(reaction, user, music_state, embed_color):
 
 
 
-
-
-
-
-
-
-
-
-
-        
-
-# 봇 토큰 읽기
-BOT_TOKEN = config.get("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("설정 파일에 봇 토큰이 없습니다.")
-
-# 유튜브 API 키 읽기
-api_key = config.get('api_key')
-if not api_key:
-    raise ValueError("설정 파일에 유튜브 API 키가 없습니다.")
-
-# 채널명 읽기
-CHANNEL_NAME = config.get("CHANNEL_NAME")
-if not CHANNEL_NAME:
-    raise ValueError("설정 파일에 채널명이 없습니다.")
-
-
 TRIGGER_CHANNEL_NAME = config.get("TRIGGER_CHANNEL_NAME")
 TEMP_CATEGORY_NAME = config.get("TEMP_CATEGORY_NAME")
 TEMP_CHANNEL_NAME = config.get("TEMP_CHANNEL_NAME")
 EMOJI_LINK_MAP_FILE = "emoji_links.json"
 
-
-def get_channel_name():
-    try:
-        return CHANNEL_NAME
-    except Exception as e:
-        print(f"[ERROR] 채널명 불러오기 실패: {e}")
-        return None
 
 async def print_message(channel, message):
     """채널에 메시지를 출력하는 함수"""
@@ -529,34 +570,6 @@ async def print_message(channel, message):
         print(f"[ERROR] 메시지 출력 중 오류 발생: {e}")
 
 
-
-EMOJI_CHANNEL_NAME = "😀┃이모지"
-MAX_EMOJIS = 50
-TEMP_CHANNELS = {}  # 생성된 채널 관리
-channel_count = 1  # 채널 번호
-MAX_RETRIES = 3
-queue_lock = asyncio.Lock()
-last_played_embed = None
-MAX_SONGS = 50 #더 높게 설정해도 유튜브 API 정책으로 한번에 50곡이 한계임.
-channel_name = get_channel_name()
-config = load_config()  # 설정 파일을 불러옵니다.
-
-music_state = MusicState()
-EMOJI_JSON_PATH = "emoji.json"
-EMOJI_FOLDER = "emoji"
-TARGET_SIZE = (128, 128)
-
-if not os.path.exists(EMOJI_FOLDER):
-    os.makedirs(EMOJI_FOLDER)
-intents = discord.Intents.default()
-intents.messages = True
-intents.guilds = True
-intents.message_content = True
-intents.reactions = True
-intents.members = True
-intents.voice_states = True
-emoji_map = set()
-bot = commands.Bot(command_prefix="!", intents=intents)
 
 # 이모지 폴더 내 파일들 중 확장자 제거한 이름만 저장
 for filename in os.listdir(EMOJI_FOLDER):
@@ -612,24 +625,8 @@ async def on_member_join(member):
     await channel.send(embed=embed)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
 @bot.event
 async def on_voice_state_update(member, before, after):
-    global channel_count
     guild = member.guild
 
     # 길드에서 트리거 채널 찾기 (이름 기반)
@@ -647,8 +644,7 @@ async def on_voice_state_update(member, before, after):
     # 사용자가 트리거 채널에 입장하면 새 채널 생성
     if after.channel and after.channel == trigger_channel:
         # 채널 이름에 번호 추가
-        new_channel_name = f"{TEMP_CHANNEL_NAME} {channel_count}"
-        channel_count += 1  # 번호 증가
+        new_channel_name = f"{TEMP_CHANNEL_NAME}"
 
         # 새 음성 채널 생성 (카테고리 지정)
         new_channel = await guild.create_voice_channel(
@@ -672,12 +668,208 @@ async def on_voice_state_update(member, before, after):
             del TEMP_CHANNELS[channel.id]
 
 
+def save_sessions():
+    try:
+        data = {}
+        for uid, session in user_sessions.items():
+            data[uid] = {
+                "answers": session["answers"],
+                "step": session["step"],
+                "image": session["image"],
+                "origin_guild": session["origin_guild"],
+                "origin_channel": session["origin_channel"]
+            }
+        with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[ERROR] 세션 저장 실패: {e}")
+
+def load_sessions():
+    global user_sessions
+    if not os.path.exists(SESSIONS_FILE):
+        return
+    try:
+        with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+            for uid, session in raw.items():
+                user_sessions[int(uid)] = session
+        print(f"[INFO] 이전 세션 {len(user_sessions)}개 불러옴.")
+    except Exception as e:
+        print(f"[ERROR] 세션 불러오기 실패: {e}")
+
+
+SESSIONS_FILE = "user_sessions.json"
+user_sessions = {}
+
+@bot.command(name="정모")
+async def 정모(ctx):
+    await ctx.message.delete()
+    config = load_config("설정.txt")
+    recruit_channel_name = config.get("cruit_channel")
+
+    if not recruit_channel_name:
+        await ctx.send("설정.txt에서 cruit_channel 값을 찾을 수 없습니다.")
+        return
+
+    guild = ctx.guild
+    recruit_channel = discord.utils.get(guild.text_channels, name=recruit_channel_name)
+
+    if not recruit_channel:
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            guild.me.top_role: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        try:
+            recruit_channel = await guild.create_text_channel(recruit_channel_name, overwrites=overwrites)
+            print(f"[INFO] '{recruit_channel_name}' 채널이 생성됨.")
+        except discord.Forbidden:
+            await ctx.send(f"'{recruit_channel_name}' 채널을 생성할 권한이 없습니다.")
+            return
+        except Exception as e:
+            await ctx.send(f"채널 생성 중 오류 발생: {e}")
+            return
+
+    user = ctx.author
+    if user.id in user_sessions:
+        await ctx.reply("이미 정모 설문이 진행 중입니다. DM을 확인해주세요.")
+        return
+
+    try:
+        dm = await user.create_dm()
+        await dm.send("정모 일정을 위한 설문을 시작합니다. `다시` = 처음부터, `뒤로` = 이전 질문")
+
+        user_sessions[user.id] = {
+            "answers": [],
+            "step": 0,
+            "image": None,
+            "origin_guild": guild.id,
+            "origin_channel": recruit_channel.id
+        }
+        save_sessions()
+        await ask_next_question(user)
+
+    except discord.Forbidden:
+        await ctx.reply("DM을 보낼 수 없습니다. DM 허용 여부를 확인해주세요.")
+
+
+async def ask_next_question(user):
+    session = user_sessions[user.id]
+    step = session["step"]
+    questions = [
+        "게임 이름이 무엇인가요?",
+        "날짜와 시간은 어떻게 되나요?",
+        "장소는 어느 곳에서 진행되나요?",
+        "최대 참여 인수는 어떻게 되나요?",
+        "따로 전달하고 싶은 참고사항이나 기타사항들을 말해주세요.",
+        "임베드 이미지로 올리고 싶은 게임 일러스트 배너를 올려주세요."
+    ]
+
+    if step < len(questions):
+        dm = await user.create_dm()
+        await dm.send(f"[질문 {step + 1}/{len(questions)}]\n{questions[step]}")
+    else:
+        await finalize_embed(user)
+
+
+async def finalize_embed(user):
+    session = user_sessions[user.id]
+    config = load_config("설정.txt")
+    guild = bot.get_guild(session["origin_guild"])
+    channel = discord.utils.get(guild.text_channels, name=config.get("cruit_channel"))
+    if not channel:
+        await user.send("설정된 채널을 찾을 수 없습니다.")
+        return
+
+    embed_color = int(config.get("embed_color", "0x3498db"), 16)
+    embed = discord.Embed(
+        title=f"주최자: {user.display_name}",
+        color=embed_color,
+        description=(
+            f"**게임 이름:** {session['answers'][0]}\n"
+            f"**날짜 및 시간:** {session['answers'][1]}\n"
+            f"**장소:** {session['answers'][2]}\n"
+            f"**최대 인원:** {session['answers'][3]}\n"
+            f"**참고사항:** {session['answers'][4]}"
+        )
+    )
+
+    embed.set_footer(text="참여하고 싶은 부원은 반응을 눌러주세요.")
+    embed.set_thumbnail(url=user.display_avatar.url)
+    if session["image"]:
+        embed.set_image(url=session["image"])
+
+    try:
+        await channel.send("@everyone")
+        msg = await channel.send(embed=embed)
+
+        emojis = [e for e in guild.emojis if not e.managed]
+        if emojis:
+            import random
+            emoji = random.choice(emojis)
+            await msg.add_reaction(emoji)
+
+        await user.send("정모 일정이 성공적으로 등록되었습니다.")
+    except Exception as e:
+        await user.send(f"정모 등록에 실패했습니다: {e}")
+
+    del user_sessions[user.id]
+    save_sessions()
+
+
+
+async def handle_dm_survey(message):
+    if message.author.bot or not isinstance(message.channel, discord.DMChannel):
+        return False
+
+    user_id = message.author.id
+    if user_id not in user_sessions:
+        return False
+
+    session = user_sessions[user_id]
+    step = session["step"]
+    content = message.content.strip()
+
+    if content == "다시":
+        session["answers"] = []
+        session["step"] = 0
+        session["image"] = None
+        await message.channel.send("설문을 처음부터 다시 시작합니다.")
+        await ask_next_question(message.author)
+        return True
+
+    if content == "뒤로":
+        if session["step"] > 0:
+            session["step"] -= 1
+            session["answers"] = session["answers"][:-1]
+            await message.channel.send("이전 질문으로 돌아갑니다.")
+        else:
+            await message.channel.send("이미 첫 번째 질문입니다.")
+        await ask_next_question(message.author)
+        return True
+
+    if step == 5:
+        if message.attachments:
+            session["image"] = message.attachments[0].url
+            session["step"] += 1
+            save_sessions()
+        else:
+            await message.channel.send("이미지를 첨부해주세요.")
+            return True
+    else:
+        session["answers"].append(content)
+        session["step"] += 1
+
+    await ask_next_question(message.author)
+    return True
 
 
 
 #전용 채널에서 입력되는 메시지로 검색을 시도하게 하는 이벤트
 @bot.event
 async def on_message(message):
+    if await handle_dm_survey(message):
+        return
+
     if message.author.bot or not message.guild:
         return
     
@@ -909,176 +1101,6 @@ async def handle_custom_emoji_message(message):
                 await message.channel.send(emoji_data[emoji.name])
                 return True  # 처리됨
     return False  # 이모지 아님
-
-
-
-@bot.command()
-async def 게임(ctx):
-    await ctx.message.delete()
-    config = load_config("설정.txt")
-    emoji_role_data = config.get("make_role", "")
-    civil_role_name = config.get("civil_role", "").strip()
-    embed_color = int(config.get("embed_color", "0xFFC0CB"), 16)
-    image_url = config.get("image_set", "")
-
-    # 역할 이모지-이름 파싱
-    items = [item.strip() for item in emoji_role_data.split(",") if item.strip()]
-    emoji_role_pairs = []
-    for item in items:
-        emoji = item[0]
-        role_name = item[1:].strip()
-        emoji_role_pairs.append((emoji, role_name))
-
-    # 역할 생성 또는 재사용
-    guild = ctx.guild
-    roles_created = {}
-    for emoji, role_name in emoji_role_pairs:
-        role = discord.utils.get(guild.roles, name=role_name)
-        if not role:
-            role = await guild.create_role(name=role_name)
-        roles_created[emoji] = role
-
-    # civil 역할 생성 또는 재사용
-    civil_role = None
-    if civil_role_name:
-        civil_role = discord.utils.get(guild.roles, name=civil_role_name)
-        if not civil_role:
-            civil_role = await guild.create_role(name=civil_role_name)
-
-    # 채널 생성 또는 재사용
-    channel_name = "🫴┃역할부여"
-    channel = discord.utils.get(guild.text_channels, name=channel_name)
-    if not channel:
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(
-                read_messages=True, send_messages=False
-            )
-        }
-        channel = await guild.create_text_channel(channel_name, overwrites=overwrites)
-
-    # 기존 메시지 삭제
-    async for msg in channel.history(limit=100):
-        await msg.delete()
-
-    # 임베드 전송
-    embed = discord.Embed(
-        title="반응을 누르고 역할을 받으세요!",
-        description="반응을 누르시면 게임 장르별로 역할을 받을 수 있습니다.\n해당 게임의 정모시에 호출을 받을 수 있습니다.\n(다시 누르시면 역할이 회수됩니다.)",
-        color=embed_color
-    )
-    embed.set_image(url=image_url)
-    embed_message = await channel.send(embed=embed)
-
-    # 반응 추가
-    for emoji, _ in emoji_role_pairs:
-        await embed_message.add_reaction(emoji)
-
-    # 메시지 ID 및 역할 저장
-    bot.role_embed_message_id = embed_message.id
-    bot.role_emoji_map = roles_created
-    bot.role_embed_channel_id = channel.id
-    bot.civil_role = civil_role
-
-
-
-
-
-
-
-
-
-
-async def cache_role_embed_messages(bot):
-    """모든 서버에서 역할부여 embed 메시지 및 역할 맵, civil 역할 강제로 캐싱"""
-    config = load_config("설정.txt")
-    target_channel_name = "🫴┃역할부여"
-    target_title = "반응을 누르고 역할을 받으세요!"
-
-    for guild in bot.guilds:
-        try:
-            channel = discord.utils.get(guild.text_channels, name=target_channel_name)
-            if not channel:
-                continue
-
-            async for message in channel.history(limit=100):
-                if message.embeds and message.embeds[0].title == target_title:
-                    # 메시지 캐싱
-                    bot._connection._messages.append(message)
-                    bot.role_embed_message_id = message.id
-                    bot.role_embed_channel_id = channel.id
-
-                    # 역할맵 캐싱: 역할 이름과 이모지 데이터 config에서 불러와 동기화
-                    emoji_role_data = config.get("make_role", "")
-                    civil_role_name = config.get("civil_role", "").strip()
-
-                    items = [item.strip() for item in emoji_role_data.split(",") if item.strip()]
-                    emoji_role_pairs = []
-                    for item in items:
-                        emoji = item[0]
-                        role_name = item[1:].strip()
-                        emoji_role_pairs.append((emoji, role_name))
-
-                    roles_created = {}
-                    for emoji, role_name in emoji_role_pairs:
-                        role = discord.utils.get(guild.roles, name=role_name)
-                        if role:
-                            roles_created[emoji] = role
-                    bot.role_emoji_map = roles_created
-
-                    # civil 역할 캐싱
-                    civil_role = None
-                    if civil_role_name:
-                        civil_role = discord.utils.get(guild.roles, name=civil_role_name)
-                    bot.civil_role = civil_role
-
-                    break
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            continue
-
-
-
-
-
-
-@bot.event
-async def on_raw_reaction_add(payload):
-    if payload.user_id == bot.user.id:
-        return
-
-    config = load_config("설정.txt")
-    emoji_store_channel_name = config.get("emoji_store_channel")
-    guild = bot.get_guild(payload.guild_id)
-    member = guild.get_member(payload.user_id)
-    emoji = str(payload.emoji)
-
-    if payload.message_id != getattr(bot, "role_embed_message_id", None):
-        return
-
-    channel = bot.get_channel(payload.channel_id)
-    if channel.name == emoji_store_channel_name:
-        return
-
-    # 반응 역할 처리
-    role = bot.role_emoji_map.get(emoji)
-    if role:
-        if role in member.roles:
-            await member.remove_roles(role)
-        else:
-            await member.add_roles(role)
-
-    # civil 역할이 있을 경우에만 무조건 추가 (반응과 무관, 제거 안 됨)
-    civil_role = getattr(bot, "civil_role", None)
-    if civil_role != "" and civil_role not in member.roles:
-        await member.add_roles(civil_role)
-
-    # 반응 제거
-    message = await channel.fetch_message(payload.message_id)
-    await message.remove_reaction(payload.emoji, member)
-
-
-
-
-
 
 
 
@@ -1820,7 +1842,6 @@ def save_emoji_json(data):
     with open(EMOJI_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-
 @tasks.loop(seconds=3)
 async def update_time(channel, music_state):
     if not music_state.is_playing or not music_state.current_song:
@@ -1936,7 +1957,6 @@ async def 설정(ctx):
     control_panel_title = config.get("control_panel_title")
     temp_channel_keyword = config.get("TEMP_CHANNEL_NAME")
     emoji_store_channel_name = config.get("emoji_store_channel")
-    emoji_panel_channel_name = config.get("EMOJI_CHANNEL")
     reactions = ["⏹️", "🔁", "⏯️", "⏭️", "🔀", "🗒️", "⏱️", "❓"]
 
     # === 권한 로직 ===
@@ -2092,19 +2112,6 @@ def load_channel_data(guild_id):
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
-
-
-
-
-
-def load_config(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return dict(line.strip().split("=", 1) for line in f if "=" in line)
-
-
-
-def calculate_hash(byte_data):
-    return hashlib.sha256(byte_data).hexdigest()
 
 missing_access_guilds = set()
 
@@ -2274,10 +2281,6 @@ async def 탈출(ctx):
         await ctx.send("✅ 나갈 서버가 없습니다.")
 
 
-
-
-
-
 async def leave_unallowed_servers():
     config = load_config("설정.txt")
     allowed_names = [name.strip() for name in config.get("allow_server", "").split(",")]
@@ -2301,6 +2304,7 @@ async def leave_unallowed_servers():
 
 @bot.event
 async def on_ready():
+    load_sessions()
     config = load_config("설정.txt")
     channel_name = config.get("CHANNEL_NAME")
     control_panel_title = config.get("control_panel_title")
@@ -2317,8 +2321,6 @@ async def on_ready():
 
     if not periodic_leave_task.is_running():
         periodic_leave_task.start()
-
-    await cache_role_embed_messages(bot)
 
     # 재생 기록 초기화
     if not os.path.exists(history_file_path):
@@ -2337,8 +2339,7 @@ async def on_ready():
         except Exception as e:
             print(f"[ERROR] '{history_file_path}' 로드 실패: {e}")
 
-    for guild in bot.guilds:
-        try:
+        for guild in bot.guilds:
             bot_member = guild.me
             if not bot_member.guild_permissions.manage_channels:
                 print(f"[WARN] {guild.name}: 채널 생성 권한 없음")
@@ -2442,37 +2443,6 @@ async def on_ready():
             except Exception as e:
                 print(f"[ERROR] 채널 메시지 정리 또는 캐싱 실패: {e}")
 
-            # 이모지 패널 반응 동기화
-            try:
-                data = load_channel_data(guild.id)
-                emoji_msg_id = data.get("emoji_message_id")
-                if emoji_msg_id and emoji_panel_channel_name:
-                    emoji_channel = discord.utils.get(guild.text_channels, name=emoji_panel_channel_name)
-                    if emoji_channel:
-                        emoji_msg = await emoji_channel.fetch_message(emoji_msg_id)
-                        existing_emoji_names = {
-                            r.emoji.name for r in emoji_msg.reactions if isinstance(r.emoji, discord.Emoji)
-                        }
-                        files = [f for f in os.listdir(EMOJI_FOLDER) if f.lower().endswith(('.png', '.jpg', '.gif'))]
-                        emoji_names = [os.path.splitext(f)[0] for f in files]
-                        for name in emoji_names:
-                            if name not in existing_emoji_names:
-                                emoji_obj = discord.utils.get(guild.emojis, name=name)
-                                if emoji_obj:
-                                    try:
-                                        await emoji_msg.add_reaction(emoji_obj)
-                                        await asyncio.sleep(0.5)
-                                    except Exception as e:
-                                        print(f"[WARN] '{name}' 반응 추가 실패: {e}")
-            except discord.Forbidden:
-                print(f"[WARN] 이모지 패널 접근 권한 부족: {guild.name}")
-            except Exception as e:
-                print(f"[ERROR] 이모지 패널 처리 중 오류: {e}")
-
-        except Exception as e:
-            print(f"[ERROR] '{guild.name}' 전체 처리 중 오류: {e}")
-            continue
-
     if status_message:
         try:
             await bot.change_presence(activity=discord.Game(name=status_message))
@@ -2489,26 +2459,20 @@ async def periodic_leave_task():
 
 async def get_proper_overwrites(guild):
     bot_member = guild.me
-    roles = [
-        role for role in guild.roles
-        if not role.is_bot_managed() and role != bot_member.top_role and role != guild.default_role
-    ]
-
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(
-            view_channel=False, send_messages=False, connect=False, speak=False
+            view_channel=False,
+            send_messages=False,
+            connect=False,
+            speak=False
         )
     }
 
-    if roles:
-        for role in roles:
+    for role in guild.roles:
+        if role != guild.default_role:
             overwrites[role] = discord.PermissionOverwrite(
-                view_channel=True, send_messages=True, connect=True, speak=True
+                view_channel=True
             )
-    else:
-        overwrites[guild.default_role] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, connect=True, speak=True
-        )
 
     return overwrites
 
@@ -2631,20 +2595,6 @@ async def cache_control_panel_message(channel):
 
 
 
-
-
-
-
-#루프들
-#-----------------------------------------------------------------------------------------------------------------
-@tasks.loop(hours=24)
-async def update_yt_dlp():
-    try:
-        print("yt-dlp 업데이트 시작...")
-        subprocess.run(["pip", "install", "--upgrade", "yt-dlp"], check=True)
-        print("yt-dlp 업데이트 완료!")
-    except subprocess.CalledProcessError as e:
-        print(f"업데이트 중 오류 발생: {e}")
 
 
 
